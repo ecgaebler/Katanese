@@ -1,0 +1,1 @@
+house, town, person, man, woman, child, friend, death, energy, aether, matter, love, type-kind, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 1e3, 1e4, fraction-ending (-st -nd -rd -th), day, hour, minute, second, night, do, un-, re-, go, hello, goodbye, sir-ma'am, at, approximately-at
