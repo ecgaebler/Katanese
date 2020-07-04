@@ -1,21 +1,62 @@
-from SyllableFrequencies import *
+from syllable_frequencies import *
 from GrammarDict import *
 import random
-import StringIO
+import io
 import sys
 
+#Parse syllable frequencies and construct weighted random number generator
+syllable_list = []
+weights = []
+marks = []
+#unpack syllables and their weights
+for syllable, weight in syllable_weights:
+    if weight > 0:
+        syllable_list.append(syllable)
+        weights.append(weight)
+#calculate marks for random number generator based on syllable weights
+if len(weights) > 0:
+    marks = [weights[0]]
+    for i in range(1,len(weights)):
+        #Each mark corresponds to the sum of all weights before the current syllable weight
+        marks.append(marks[i - 1] + weights[i])
+
 def err(string):
-    print >> sys.stderr, string
+    print(string, file=sys.stderr)
     return
 
 def line():
-    print "-" * 80
+    print("-" * 80)
 
-def syltotal():
-    """ For some reason, the two occurance totals calculated don't match. ):"""
-    # mark_hjo and total are from SyllableFrequencies.py
-    print "mark_hjo", mark_hjo
-    print "total   ", total
+def closest_mark(nums, target):
+    """ Returns index of closest value not less than target. """
+    l, r = 0, len(nums) - 1
+    while l + 1 < r:
+        mid = l + (r - l)//2
+        if nums[mid] < target:
+            l = mid
+        else:
+            r = mid
+    if nums[l] >= target:
+        return l
+    else:
+        return r
+
+def new_syllable(syllables, excluded=[]):
+    """ Returns a random syllable.
+    INPUTS:
+    syllables —— a list of syllables to select from
+    excluded —— a list of syllables to exclude
+    """
+    if not syllables or syllables == excluded:
+        err("UM: NO VALID SYLLABLES SUPPLIED")
+        return ""
+    while True:
+        target = random.randint(0,marks[-1])
+        # Find index of closest mark such that target <= mark
+        mark = closest_mark(marks, target)
+        if syllables[mark] not in excluded:
+            break
+    return syllables[mark]
 
 
 def newSyllable(vowels=True, nr=True, others=True):
@@ -172,7 +213,12 @@ def newSyllable(vowels=True, nr=True, others=True):
 
 
 def syllables(s=2):
-    """ Return s random syllables, concatenated """
+    """ Return a word composed of s concatenated random syllables. 
+    This function includes the phonetic rules for the language being created.
+    Until modified, these rules are designed to generate words with phonetic
+    structure almost identical to those of Japanese words. If you want complex
+    phonetic rules, this function is where they should be defined.
+    """
     word = ""
     vowels = True
     nr = False  # Initial syllable cannot be 'n' or 'r'
@@ -183,14 +229,17 @@ def syllables(s=2):
 
     if s == 1:
         vowels = False
-        return newSyllable(vowels,nr,others)
+        #return newSyllable(vowels,nr,others)
+        return new_syllable(syllable_list, ["n", "r"])
 
+    #TODO: rewrite this structure to use newer new_syllable function
     if s > 1:
         newSyl = ""
         for i in range(s):
             if i == 0 or 1 == s:
                 nr = False      # Word cannot start or end in 'n' or 'r'
             newSyl = newSyllable(vowels,nr,others)
+            #newSyl = new_syllable(syllable_list, ["n", "r"])
             if newSyl in ['n','r']:
                 vowels = False  # Vowel cannot follow isolated 'n' or 'r'
                 nr = False      # Double 'n' or 'r' not allowed
@@ -210,10 +259,12 @@ def syllables(s=2):
         err("[YOU DONE MESSED UP: INVALID NUMBER OF SYLLABLES]")
         return ""
 
-
+'''
+# UNUSED FUNCTIONS
 def doubleWord(s):
-    """ number of syllables s
-    return first s-syllable word generated simultaneously by two generators
+    """ Return the first s-syllable word generated simultaneously by two generators.
+    This amplifies the effects of the weights given to different syllables, 
+    making common syllables even more common, and rare syllables even more rare.
     """
     word1 = syllables(s)
     word2 = syllables(s)
@@ -221,7 +272,6 @@ def doubleWord(s):
         word1 = syllables(s)
         word2 = syllables(s)
     return word1
-
 
 def wordsSquared(n,s):
     """ return n s-syllable words using doubleWord to amplify probabilities """
@@ -233,7 +283,6 @@ def wordsSquared(n,s):
         words = words + " " + word
     return words
 
-    
 def words(n,s=1):
     """ return n distinct words, each with s syllables """
     words = ""
@@ -243,11 +292,13 @@ def words(n,s=1):
              word = syllables(s)
         words = words + " " + word
     return words
+'''
 
-
-def parseFile(path='/home/malerei/Documents/Katanese/katanese_words_multi-syllable.txt'):
-    """ Return file found at 'path' after parsing it. """
-    print "parsing file..."
+def file_to_wordlist(path='./wordlist_Nsyllable'):
+    """ Return lists of simple and complex words found in file at given path.
+    Input defaults to "wordlist_Nsyllable" file.
+    """
+    print("parsing file...")
     inFile = open(path).read()
     wordList = []
     compoundList = []
@@ -282,7 +333,7 @@ def parseFile(path='/home/malerei/Documents/Katanese/katanese_words_multi-syllab
                     return [wordList,compoundList]
             else: 
                 word += c
-    print "file parsing complete."
+    print("file parsing complete.")
     line()
     return [wordList,compoundList]
 
@@ -327,94 +378,112 @@ def parseCompWord(compWord):
         err("SORRY DUDE(ETTE): UNMATCHED '('")
     return compWordParse
 
-
+'''
 def generateWordsDict(wordLists=[[],[]],
                       D={},
                       prob1=9,
                       prob2=80,
                       prob3=10,
                       prob4=1):
-    """ generate translation for words found in wordLists """
-    print "beginning translation..."
-    # Unpack word lists
-    simpleWords = wordLists[0]
-    compWords = wordLists[1]
-    dValues = D.values()
-    newWord = ""    # This is the current word being processed
+'''
+def generateWordsDict(simple_words, compound_words, existing_dict, weights=[9,80,10,2,1]):
+    """ Generate translations for compund and simple words. 
+
+    INPUTS:
+    simple_words —— a list strings representing simple words
+
+    compound_words —— a list strings representing compound words
+
+    existing_dict —— a dictionary of existing words and their translations,
+                     to be added to as new translations are generated.
+
+    weights —— a list of weights for the number of syllables. A heigher weight
+               means a higher probability of being chosen. The weight at index 
+               i corresponds to the chance of the word having i syllables.
+    """
+    print("beginning translation...")
+    existing_words = list(existing_dict.values())
+    new_word = ""   # This is the current word being processed
     compWord = []   # This will contain, in order, the pieces of a compound
     parsedWord = "" # This holds a compound word after parsing
     wordsTranslated = ""    # This will hold a list of all words added
     
-    totalProb = prob1 + prob2 + prob3 + prob4
-    if totalProb == 0:
+    weight_sum = sum(weights)
+    if weight_sum == 0:
         err("YOU DONE IT WRONG: INVALID PROBABILITY DISTRIBUTION")
         return []
+
     randomNum = 0
-    skipping = False
+    skipping = False #"skipping" is only used for the explanatory printing 
+
     # Generate translations for simple words
-    print "...generating simple word translations"
-    for word in simpleWords:
-        newWord = ""
+    print("...generating simple word translations")
+    for word in simple_words:
+        new_word = ""
         # Make sure key doesn't already exist
-        if D.has_key(word):
+        if word in existing_dict:
             skipping = True
         else:
             # Make sure value doesn't already exist
-            while (newWord == "" or newWord in dValues):
-                randomNum = random.choice(range(totalProb)) + 1
+            while (new_word == "" or new_word in existing_words):
+                randomNum = random.choice(list(range(weight_sum))) + 1
                 if randomNum <= prob1:
-                    newWord = syllables(1)
+                    new_word = syllables(1)
                 elif randomNum <= prob1 + prob2:
-                    newWord = syllables(2)
+                    new_word = syllables(2)
                 elif randomNum <= prob1 + prob2 + prob3:
-                    newWord = syllables(3)
+                    new_word = syllables(3)
                 else:
-                    newWord = syllables(4)
-            D[word] = newWord
-            wordsTranslated += "\n" + word + ": " + newWord
+                    new_word = syllables(4)
+            existing_dict[word] = new_word
+            wordsTranslated += "\n" + word + ": " + new_word
     if skipping:
-        print "...Skipping words already defined"
+        print("...Skipping words already defined")
         skipping = False
-    # Generate translations for compound words
-    print "...generating compound word translations"
-    for word in compWords:
-        newWord = ""
+
+    # Generate translations for compound words. 
+    # Note that all components of a compound word must already be defined.
+    print("...generating compound word translations")
+    for word in compound_words:
+        new_word = ""
         parsedWord = parseCompWord(word)
         # Make sure key doesn't already exist
-        if D.has_key(parsedWord[0]):
+        if parsedWord[0] in existing_dict:
             skipping = True
         else:
             if len(parsedWord) < 2:
                 err("NO CAN DO: 'COMPOUND WORD' EITHER BROKEN OR NOT COMPOUND")
                 err("BROKEN WORD: " + word)
-                return D
+                return existing_dict
             else:
-                #print "-  word components: ", parsedWord[1:]
+                #print("-  word components: ", parsedWord[1:])
                 for piece in parsedWord[1:]:
-                    if not D.has_key(piece):
+                    if piece not in existing_dict:
                         err("OOPS: COMPONENT OF COMPOUND WORD NOT YET DEFINED")
                         err("BROKEN WORD: " + word)
                         err("MISSING WORD: " + piece)
-                        return D
+                        return existing_dict
                     else:
-                        newWord += D[piece] # Build new word from pieces found in d
-            if not parsedWord[0] in D:
-                D[parsedWord[0]] = newWord
-                wordsTranslated += "\n" + parsedWord[0] + ": " + newWord
+                        # Build new word from words already found in dictionary
+                        new_word += existing_dict[piece]
+            if not parsedWord[0] in existing_dict:
+                existing_dict[parsedWord[0]] = new_word
+                wordsTranslated += "\n" + parsedWord[0] + ": " + new_word
             else:
                 err("NOPE: COMPOUND WORD COLLISION")
                 err("tried to change " + parsedWord[0] +
-                    " from " + D[parsedWord[0]] +
-                    " to " + newWord)
+                    " from " + existing_dict[parsedWord[0]] +
+                    " to " + new_word)
     if skipping:
-        print "...Skipping compound words already defined"
-    print "translation complete."
+        print("...Skipping compound words already defined")
+
+    print("translation complete.")
     if not wordsTranslated == "":
-        print "new translations: " + wordsTranslated[:-2]
+        print("new translations: " + wordsTranslated[:-2])
     else:
-        print "no new words."
+        print("no new words.")
     line()
-    return D
+    return existing_dict
 
 
 def printDict(D={}):
@@ -428,43 +497,50 @@ def printDict(D={}):
     printOut = ""
     for word in translateList:
         printOut += word + "\n"
-    print printOut
+    print(printOut)
     return
 
 
 def createKatanese():
     """ Generate all translations from English to Katanese """
-    wordList1Syl = parseFile('/home/malerei/Documents/Katanese/katanese_words_1-syllable.txt')
-    wordListXSyl  = parseFile('/home/malerei/Documents/Katanese/katanese_words_multi-syllable.txt')
+    wordlist_1syl = file_to_wordlist('./wordlist_1syllable')
+    wordlist_Nsyl  = file_to_wordlist('./wordlist_Nsyllable')
     D = grammarDict
-    singleSylDict = generateWordsDict(wordList1Syl, D, 1, 0, 0, 0)
-    for key in singleSylDict:
-        D[key] = singleSylDict[key]
-    multiSylDict = generateWordsDict(wordListXSyl, D)
-    for key in multiSylDict:
-        D[key] = multiSylDict[key]
+    dict_1syl = generateWordsDict(wordlist_1syl, D, 1, 0, 0, 0)
+    for key in dict_1syl:
+        D[key] = dict_1syl[key]
+    dict_Nsyl = generateWordsDict(wordlist_Nsyl, D)
+    for key in dict_Nsyl:
+        D[key] = dict_Nsyl[key]
     printDict(D)
     return
-def addWords(pathAdditional='/home/malerei/Documents/Katanese/katanese_additional_words.txt',
+
+def addWords(new_words_path='./additional_words',
              prob1=19,
              prob2=1,
              prob3=0,
              prob4=0):
-    """ Add words to the Katanese dictionary """
-    pathDict = '/home/malerei/Documents/Katanese/katanese_dictionary.txt'
-    D = listToDict(readTranslations(pathDict))
-    wordLists = parseFile(pathAdditional)
-    D = generateWordsDict(wordLists, D, 9, 80, 10, 1)
+    """ Add words to an existing translation dictionary.
+
+    ARGUMENTS:
+    new_words_path —— file path to file containing a list of words to add
+    prob1 ... prob4 —— probability weights for any new word having 1 ... 4 syllables
+
+    """
+    dict_path = './existing_dictionary'
+    D = listToDict(readTranslations(dict_path))
+    new_words = file_to_wordlist(new_words_path)
+    D = generateWordsDict(new_words, D, 9, 80, 10, 1)
     printDict(D)
     return
 
 
-def readTranslations(path='/home/malerei/Documents/Katanese/katanese_dictionary.txt'):
-    """ Read a Katanese dictionary file and parse it into a list """
-    L = open(path).readlines()
-    for line in range(len(L)):
-        L[line] = L[line][:-1]  # Remove newline characters
-    return L
+def readTranslations(path='./existing_dictionary'):
+    """ Read an existing dictionary file and parse it into a list """
+    lines = open(path).readlines()
+    for i in range(len(lines)):
+        lines[i] = lines[i][:-1]  # Remove newline characters
+    return lines
 
 
 def listToDict(L=[]):
